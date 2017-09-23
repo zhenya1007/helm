@@ -217,33 +217,42 @@ In this case last position is added to the register
 ;;; Utils functions
 ;;
 ;;
+(defcustom helm-switch-to-buffers-function #'helm-window-default-split-fn
+  "The default function to use when distibuting several buffers at once."
+  :group 'helm-utils
+  :type 'function)
+
 (defun helm-switch-to-buffers (buffer-or-name &optional other-window)
   "Switch to buffer BUFFER-OR-NAME.
-
-If more than one buffer marked switch to these buffers in separate windows.
-If OTHER-WINDOW is specified keep current-buffer and switch to others buffers
-in separate windows.
+If more than one buffer marked switch to these buffers in separate
+windows. If OTHER-WINDOW is specified keep current-buffer and switch
+to others buffers in separate windows.
 If a prefix arg is given split windows vertically."
   (let ((mkds          (helm-marked-candidates))
         (initial-ow-fn (if (cdr (window-list))
                            #'switch-to-buffer-other-window
                          #'helm-switch-to-buffer-other-window)))
     (helm-aif (cdr mkds)
-        (progn
-          (if other-window
-              (funcall initial-ow-fn (car mkds))
-            (switch-to-buffer (car mkds)))
-          (save-selected-window
-            (cl-loop with nosplit
-                     for b in it
-                     when nosplit return
-                     (message "Too many buffers to visit simultaneously")
-                     do (condition-case _err
-                            (helm-switch-to-buffer-other-window b 'balance)
-                          (error (setq nosplit t) nil)))))
+        (funcall helm-switch-to-buffers-function it
+                 (and other-window initial-ow-fn))
       (if other-window
           (funcall initial-ow-fn buffer-or-name)
         (switch-to-buffer buffer-or-name)))))
+
+;; helm-window-default-split-fn will be one function suitable for
+;; helm-switch-to-buffers-function.
+(defun helm-window-default-split-fn (candidates &optional other-window-fn)
+  (if other-window-fn
+      (funcall other-window-fn (car candidates))
+    (switch-to-buffer (car candidates)))
+  (save-selected-window
+    (cl-loop with nosplit
+             for b in candidates
+             when nosplit return
+             (message "Too many buffers to visit simultaneously")
+             do (condition-case _err
+                    (helm-switch-to-buffer-other-window b 'balance)
+                  (error (setq nosplit t) nil)))))
 
 (defun helm-simultaneous-find-file (files)
   "Find files in FILES list in separate windows.
